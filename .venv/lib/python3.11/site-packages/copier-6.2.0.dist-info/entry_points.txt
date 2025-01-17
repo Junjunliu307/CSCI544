@@ -1,0 +1,3 @@
+[console_scripts]
+copier=copier.cli:CopierApp.run
+
