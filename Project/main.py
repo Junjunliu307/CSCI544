@@ -16,8 +16,8 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain.memory import ConversationBufferMemory
 
 # --------------- Step 1: Set up API keys ---------------
-os.environ["OPENAI_API_KEY"] = "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"
-os.environ["TAVILY_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = ""
+os.environ["TAVILY_API_KEY"] = ""
 
 # --------------- Step 2: 定义 FastAPI ---------------
 app = FastAPI(title="LangChain ChatBot")
@@ -41,7 +41,7 @@ tools = [
 
 # --------------- Step 5: Initialize the OpenAI language model ---------------
 llm = ChatOpenAI(
-    model="gpt-4",
+    model="gpt-4o-mini",
     temperature=0
 )
 
@@ -132,9 +132,9 @@ def chat_endpoint(request: ChatRequest):
         chatbot_message=response_text
     )
 
-
 # --------------- Step 9: 启动应用 ---------------
 # 在终端运行: uvicorn main:app --reload
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+

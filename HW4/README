@@ -1,0 +1,56 @@
+"""
+main.py - NER with Bidirectional LSTM
+
+Description:
+------------
+This script implements a simple Bidirectional LSTM model for Named Entity Recognition (NER) using PyTorch.
+It is designed for Task 1, where the model uses randomly initialized word embeddings (i.e., no pre-trained GloVe embeddings).
+The model architecture is:
+    Embedding -> BLSTM -> Linear -> ELU -> Classifier
+
+Features:
+---------
+- Reads training and development data from the "data" folder. The data files (train and dev) should be formatted as:
+    <index> <word> <NER-tag>
+  with sentences separated by an empty line.
+- Uses SGD as the optimizer and a standard training loop.
+- Generates predictions on the development data and calls the provided "eval.py" script for evaluation.
+- Supports predicting on a test file (located at "data/test") which does not contain gold labels.
+  The test file should have each line formatted as:
+    <index> <word>
+  with sentences separated by an empty line.
+- In test mode, the script outputs predictions into "test_predictions.txt" following the format:
+    <index> <word> <predicted-tag>
+
+Usage:
+------
+1. Prepare your data:
+   - Training data: data/train
+   - Development data: data/dev
+   - Test data (without gold labels): data/test
+
+2. To run in training mode (train the model and evaluate on dev):
+       python main.py --mode train
+   The script will also call the provided "eval.py" script (which in turn uses "conll03eval") to evaluate the dev predictions.
+   Make sure that eval.py and the evaluation perl script (conll03eval) are in your working directory.
+
+3. To run in test mode (generate predictions for the test file):
+       python main.py --mode test
+   The predictions will be saved in "test_predictions.txt".
+
+Dependencies:
+-------------
+- Python 3.x
+- PyTorch
+- scikit-learn (for evaluation metrics)
+
+Note:
+-----
+- Adjust hyperparameters such as batch size, learning rate, and number of epochs as needed.
+- The provided code does not use pre-trained GloVe embeddings.
+- For evaluation on dev data, the script calls:
+       python eval.py -p <predicted_file> -g data/dev
+  Ensure that both eval.py and its dependent evaluation script are present.
+
+Author: Junjun Liu
+"""
