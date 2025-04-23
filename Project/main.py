@@ -173,8 +173,8 @@ with torch.no_grad():
 test_auc = roc_auc_score(test_labels, test_preds)
 print(f"\n Final Test AUC: {test_auc:.4f}")
 
-# plt.figure(figsize=(10, 4))
-# plt.subplot(1, 2, 1); plt.plot(losses); plt.title("Loss")
-# plt.subplot(1, 2, 2); plt.plot(aucs); plt.title("Validation AUC")
-# plt.suptitle(f"Test AUC = {test_auc:.4f}")
-# plt.tight_layout(); plt.show()
+plt.figure(figsize=(10, 4))
+plt.subplot(1, 2, 1); plt.plot(losses); plt.title("Loss")
+plt.subplot(1, 2, 2); plt.plot(aucs); plt.title("Validation AUC")
+plt.suptitle(f"Test AUC = {test_auc:.4f}")
+plt.tight_layout(); plt.show()
