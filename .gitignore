@@ -5,10 +5,10 @@ exam/
 Pytorch/
 
 
-# macOS 系统文件
+# macOS
 .DS_Store
 
-# Python 缓存
+
 __pycache__/
 *.py[cod]
 *.pyo
@@ -16,31 +16,28 @@ __pycache__/
 # Jupyter Checkpoints
 .ipynb_checkpoints/
 
-# VSCode 和 PyCharm 配置
+# VSCode 和 PyCharm 
 .vscode/
 .idea/
 
-# 环境文件
+
 .env
 .venv/
 env/
 venv/
 
-# Notebook 输出
+# Notebook
 *.nbconvert.ipynb
 
-# 编译生成文件
 *.so
 *.out
 *.o
 *.a
 *.log
 
-# 依赖文件
 pip-log.txt
 poetry.lock
 
-# 虚拟环境包
 *.egg-info/
 dist/
 build/
@@ -49,14 +46,13 @@ build/
 ~$*
 .ipynb_checkpoints/
 
-# PDF 或导出的 notebook 文件
 
 
-# 覆盖本地开发生成的报告和作业
 HW*/HW*-CSCI544.pdf
 HW*/README.md
 
-# 其他用户生成的数据或模型缓存（可根据项目自定义）
 *.ckpt
 *.h5
 *.pth
+
+/Project/impression_1M_50.csv
