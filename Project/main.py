@@ -1,140 +1,180 @@
-import os
-from typing import Dict, Union
+import pandas as pd
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import roc_auc_score
+from torch.utils.data import Dataset, DataLoader
+import matplotlib.pyplot as plt
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import pandas as pd
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import roc_auc_score
+from torch.utils.data import Dataset, DataLoader
+import matplotlib.pyplot as plt
 
-# LangChain & 相关依赖
-from langchain.schema import AIMessage, HumanMessage
-from langchain.chat_models import ChatOpenAI
-from langchain.agents import (
-    initialize_agent,
-    Tool
-)
-from langchain.agents.agent_types import AgentType
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain.memory import ConversationBufferMemory
+EMBED_DIM = 16
+BATCH_SIZE = 1024
+EPOCHS = 10
+LR = 0.0001
 
-# --------------- Step 1: Set up API keys ---------------
-os.environ["OPENAI_API_KEY"] = ""
-os.environ["TAVILY_API_KEY"] = ""
+ads = pd.read_csv("/content/drive/MyDrive/Rec_data/impression_1M_50.csv")
+ads = ads.sample(frac=1.0, random_state=42).reset_index(drop=True)
 
-# --------------- Step 2: 定义 FastAPI ---------------
-app = FastAPI(title="LangChain ChatBot")
-
-# --------------- Step 3: Initialize the Tavily search tool ---------------
-tool = TavilySearchResults(max_results=2)
-
-# --------------- Step 4: Define tools ---------------
-tools = [
-    Tool(
-        name="search",
-        func=tool.run,
-        description="Search the web and return top search results."
-    ),
-    Tool(
-        name="calculator",
-        func=lambda expr: f"The result of {expr} is {eval(expr)}",
-        description="A calculator to evaluate mathematical expressions."
-    )
+cat_features = [
+    'user_id', 'answer_id', 'question_id', 'author_id',
+    'gender', 'register_type', 'register_platform',
+    'device_model', 'device_brand', 'platform',
+    'province', 'city',
+    'from_android', 'from_iphone', 'from_ipad',
+    'from_pc', 'from_mobile_web',
+    'is_anonymous', 'is_high_value', 'is_editor_recommended',
+    'has_pictures', 'has_videos',
+    'is_excellent_author', 'is_excellent_answerer'
 ]
 
-# --------------- Step 5: Initialize the OpenAI language model ---------------
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0
+num_features = [
+    'register_timestamp', 'login_frequency',
+    'followers', 'topics_followed', 'questions_followed',
+    'answers', 'questions', 'comments',
+    'thanks_received', 'comments_received',
+    'likes_received', 'dislikes_received',
+    'thanks_count', 'likes_count', 'comments_count',
+    'collections_count', 'dislikes_count',
+    'reports_count', 'helpless_count',
+    'question_answer', 'question_follower',
+    'question_invitation', 'question_comments',
+    'author_follower_count'
+]
+
+for col in cat_features:
+    ads[col] = LabelEncoder().fit_transform(ads[col].astype(str))
+
+field_dims = [ads[col].nunique() for col in cat_features]
+cross_idx = [0, 1]  # Placeholder indices; update based on actual interaction fields if needed
+
+# Dummy answer vectors for demonstration purposes
+# answer_vec = torch.randn(len(ads), 768)
+ads['answer_vector'] = ads['answer_vector'] \
+    .apply(lambda x: np.fromstring(x.strip('[]'), sep=' '))
+
+
+answer_vec = torch.tensor(
+    np.stack(ads['answer_vector'].values),
+    dtype=torch.float32
 )
 
-# --------------- Step 6: Initialize Memory & Agent (模板) ---------------
-def create_new_agent():
-    """
-    创建一个新的 Agent 和 Memory，用于管理一个会话的上下文。
-    每个 session_id 都拥有自己的 memory & agent。
-    """
-    memory = ConversationBufferMemory(
-        memory_key="chat_history",
-        return_messages=True
-    )
-    agent = initialize_agent(
-        tools=tools,
-        llm=llm,
-        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
-        verbose=True,
-        memory=memory
-    )
-    return agent, memory
+
+X_cat = torch.LongTensor(ads[cat_features].values)
+X_num = torch.FloatTensor(ads[num_features].fillna(-1).values)
+y = torch.FloatTensor(ads['label'].values)
+# answer_vec = ads['answer_vector']  # Assuming provided or generated externally
+# answer_vec = torch.tensor(np.stack(answer_vec.values), dtype=torch.float32)
+
+# Train/Val/Test split
+train_size = int(0.8 * len(ads))
+val_size = int(0.1 * len(ads))
+test_size = len(ads) - train_size - val_size
+
+X_c_train, X_c_temp = torch.split(X_cat, [train_size, val_size + test_size])
+X_n_train, X_n_temp = torch.split(X_num, [train_size, val_size + test_size])
+y_train, y_temp = torch.split(y, [train_size, val_size + test_size])
+vec_train, vec_temp = torch.split(answer_vec, [train_size, val_size + test_size])
+
+X_c_val, X_c_test = torch.split(X_c_temp, [val_size, test_size])
+X_n_val, X_n_test = torch.split(X_n_temp, [val_size, test_size])
+y_val, y_test = torch.split(y_temp, [val_size, test_size])
+vec_val, vec_test = torch.split(vec_temp, [val_size, test_size])
+
+class RecDataset(Dataset):
+    def __init__(self, cat, num, y, answer_vec):
+        self.cat, self.num, self.y, self.vec = cat, num, y, answer_vec
+    def __len__(self): return len(self.y)
+    def __getitem__(self, i):
+        return self.cat[i], self.num[i], self.y[i], self.vec[i]
+
+train_loader = DataLoader(RecDataset(X_c_train, X_n_train, y_train, vec_train), batch_size=BATCH_SIZE, shuffle=True)
+val_loader = DataLoader(RecDataset(X_c_val, X_n_val, y_val, vec_val), batch_size=BATCH_SIZE)
+test_loader = DataLoader(RecDataset(X_c_test, X_n_test, y_test, vec_test), batch_size=BATCH_SIZE)
 
 
-# --------------- 定义存储会话状态的数据结构 ---------------
-class SessionState:
-    """
-    用于存储单个 session (会话) 的 agent, memory, messages 等。
-    这样可以在每次调用时，基于 session_id 取回对话历史。
-    """
-    def __init__(self):
-        self.agent, self.memory = create_new_agent()
-        self.messages = []  # 存储 [HumanMessage, AIMessage, ...]
+class FM(nn.Module):
+    def forward(self, emb):
+        square_sum = torch.sum(emb, dim=1)**2
+        sum_square = torch.sum(emb**2, dim=1)
+        return 0.5 * (square_sum - sum_square)
 
-# --------------- 全局维护一个 session_states，用于管理多个 session ---------------
-session_states: Dict[str, SessionState] = {}
+class DINDeepFM(nn.Module):
+    def __init__(self, field_dims, cross_idx, emb_dim=EMBED_DIM , vec_dim=64,num_dim=len(num_features)):
+        super().__init__()
+        self.embeddings = nn.ModuleList([nn.Embedding(d, emb_dim) for d in field_dims])
+        self.fm = FM()
+        self.cross_idx = cross_idx
+        # self.answer_proj = nn.Linear(vec_dim, emb_dim)
+        self.mlp = nn.Sequential(
+            # nn.Linear(emb_dim * len(field_dims) + emb_dim + 1, 128),
+            # nn.Linear(emb_dim * len(field_dims) + emb_dim + len(num_features) + emb_dim, 128),
+            nn.Linear((emb_dim * len(field_dims))+ len(num_features) + vec_dim, 256),
+            nn.ReLU(), nn.Dropout(0.2),
+            nn.Linear(256, 128), nn.ReLU(), nn.Linear(128, 1)
+        )
+        self.num_bn = nn.BatchNorm1d(num_dim)
 
+    def forward(self, x_cat, x_num, answer_vec):
+        num_norm=self.num_bn(x_num)
+        embs = [emb(x_cat[:, i]) for i, emb in enumerate(self.embeddings)]
+        fm_out = self.fm(torch.stack([embs[i] for i in self.cross_idx], dim=1))
+        # answer_vec = self.answer_proj(answer_vec.detach())
+        # final = torch.cat([*embs, fm_out, x_num, answer_vec], dim=1)
+        final = torch.cat([*embs,num_norm,answer_vec], dim=1)
+        return self.mlp(final).squeeze()
 
-# --------------- Step 7: 定义请求和响应模型 ---------------
-class ChatRequest(BaseModel):
-    """客户端请求数据"""
-    session_id: str
-    user_message: str
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = DINDeepFM(field_dims, cross_idx).to(device)
+criterion = nn.BCEWithLogitsLoss()
+optimizer = optim.Adam(model.parameters(), lr=LR)
 
-class ChatResponse(BaseModel):
-    """服务端响应数据"""
-    session_id: str
-    chatbot_message: str
+losses, aucs = [], []
+for epoch in range(EPOCHS):
+    model.train(); total_loss = 0
+    for xc, xn, yb, vec in train_loader:
+        xc, xn, yb, vec = xc.to(device), xn.to(device), yb.to(device), vec.to(device)
+        pred = model(xc, xn, vec)
+        loss = criterion(pred, yb)
+        optimizer.zero_grad(); loss.backward(); optimizer.step()
+        total_loss += loss.item()
 
+    model.eval(); preds, labels = [], []
+    with torch.no_grad():
+        for xc, xn, yb, vec in val_loader:
+            xc, xn, vec = xc.to(device), xn.to(device), vec.to(device)
+            pred = model(xc, xn, vec)
+            preds.extend(torch.sigmoid(pred).cpu().numpy())
+            labels.extend(yb.numpy())
+    auc = roc_auc_score(labels, preds)
+    print(f"Epoch {epoch+1}: Loss={total_loss/len(train_loader):.4f}, AUC={auc:.4f}")
+    losses.append(total_loss / len(train_loader))
+    aucs.append(auc)
 
-# --------------- Step 8: 定义聊天接口 ---------------
-@app.post("/chat", response_model=ChatResponse)
-def chat_endpoint(request: ChatRequest):
-    """
-    - 接收 session_id, user_message
-    - 如果不存在该 session_id，则在服务器新建一个会话
-    - 将 user_message 传给 agent.run()，产生回答
-    - 返回回答，并存储在服务器端
-    """
-    session_id = request.session_id
-    user_input = request.user_message.strip()
+model.eval(); test_preds, test_labels = [], []
+with torch.no_grad():
+    for xc, xn, yb, vec in test_loader:
+        xc, xn, vec = xc.to(device), xn.to(device), vec.to(device)
+        pred = model(xc, xn, vec)
+        test_preds.extend(torch.sigmoid(pred).cpu().numpy())
+        test_labels.extend(yb.numpy())
+test_auc = roc_auc_score(test_labels, test_preds)
+print(f"\n Final Test AUC: {test_auc:.4f}")
 
-    if not user_input:
-        raise HTTPException(status_code=400, detail="User message cannot be empty.")
-
-    # 如果 session_id 不存在，则新建会话
-    if session_id not in session_states:
-        session_states[session_id] = SessionState()
-
-    # 取出本会话的 agent, memory, messages
-    session_state = session_states[session_id]
-    agent = session_state.agent
-    messages = session_state.messages
-
-    # 追加用户消息到本地存储
-    user_msg = HumanMessage(content=user_input)
-    messages.append(user_msg)
-
-    # 由 Agent 生成回复
-    response_text = agent.run(user_input)
-
-    # 追加 AI 消息到本地存储
-    ai_msg = AIMessage(content=response_text)
-    messages.append(ai_msg)
-
-    # 返回给客户端
-    return ChatResponse(
-        session_id=session_id,
-        chatbot_message=response_text
-    )
-
-# --------------- Step 9: 启动应用 ---------------
-# 在终端运行: uvicorn main:app --reload
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
+# plt.figure(figsize=(10, 4))
+# plt.subplot(1, 2, 1); plt.plot(losses); plt.title("Loss")
+# plt.subplot(1, 2, 2); plt.plot(aucs); plt.title("Validation AUC")
+# plt.suptitle(f"Test AUC = {test_auc:.4f}")
+# plt.tight_layout(); plt.show()

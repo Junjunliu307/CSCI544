@@ -1,7 +1,0 @@
-fastapi
-pydantic
-uvicorn
-langchain
-langchain-community
-openai
-tavily-python
